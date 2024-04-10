@@ -4,11 +4,62 @@ use clap::Parser;
 use glob::glob;
 use rayon::iter::ParallelBridge;
 use rayon::prelude::*;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use std::fs::{self, OpenOptions};
 use std::io::prelude::*;
 use std::io::{self, BufWriter};
 use std::path::{Path, PathBuf};
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Platform
+{
+    kind: String,
+    value: String
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PlayerStats
+{
+    #[serde(alias = "Goals")]
+    goals: u32,
+    #[serde(alias = "Assists")]
+    assists: u32,
+    #[serde(alias = "Shots")]
+    shots: u32,
+    #[serde(alias = "Name")]
+    name: String,
+    #[serde(alias = "Platform")]
+    platform: Platform,
+    #[serde(alias = "Saves")]
+    saves: u32,
+    #[serde(alias = "Score")]
+    score: u32,
+    #[serde(alias = "Team")]
+    team: u32,
+    #[serde(alias = "OnlineID")]
+    online_id: String,
+    #[serde(alias = "bBot")]
+    b_bot: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct OSCUPReplay 
+{
+    #[serde(alias = "TeamSize")]
+    pub team_size: u32,
+    #[serde(alias = "Date")]
+    pub date_as_string: String,
+    #[serde(alias = "Id")]
+    pub id: String,
+    #[serde(alias = "MatchType")]
+    pub match_type: String,
+    #[serde(alias = "Team0Score")]
+    pub team_0_score:u32,
+    #[serde(alias = "Team1Score")]
+    pub team_1_score:u32,
+    #[serde(alias = "PlayerStats")]
+    pub player_stats: Vec<PlayerStats>,
+}
 
 /// Parses Rocket League replay files and outputs JSON with decoded information
 #[derive(Parser, Debug, Clone, PartialEq)]
@@ -59,6 +110,15 @@ struct Opt {
 struct RocketReplay<'a> {
     file: &'a PathBuf,
     replay: Replay,
+}
+
+fn from_boxcar_replay_to_oscupreplay(rep: &Replay) -> Result<OSCUPReplay, serde_json::Error>
+{
+    let str_replay_result = serde_json::to_string(&rep);
+    match str_replay_result {
+        Err(e) => Err(e),
+        Ok(str_replay) =>  serde_json::from_str(&str_replay)
+    }
 }
 
 fn read_file(opt: &Opt, file_path: PathBuf) -> anyhow::Result<(PathBuf, Replay)> {
@@ -186,6 +246,10 @@ fn parse_multiple_replays(opt: &Opt) -> anyhow::Result<()> {
                     file: &file,
                     replay,
                 };
+
+                let oscup_replay_result = from_boxcar_replay_to_oscupreplay(&rep.replay);
+                println!("{:?}", oscup_replay_result?);
+
                 serde_json::to_string(&rep)
                     .with_context(|| format!("Could not serialize replay {}", file.display()))
             })
@@ -274,6 +338,7 @@ fn run() -> anyhow::Result<()> {
 }
 
 fn main() {
+    let _debug = true;
     if let Err(e) = run() {
         // Try and detect a broken pipe (piping stdout to head -c 50),
         // and if so exit gracefully
